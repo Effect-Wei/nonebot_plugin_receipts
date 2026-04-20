@@ -20,33 +20,63 @@ class ReceiptTemplate(BaseModel):
     """Layout template for receipt rendering."""
 
     margin: int = Field(default=16, ge=0, le=64)
+    header_enabled: bool = False
+    header_text: str = "{sender_name}({sender_id})"
     footer_enabled: bool = True
     footer_text: str = "{sender_name}({sender_id}) @ {timestamp}"
     footer_timestamp_format: str = "%Y-%m-%d %H:%M:%S"
     footer_timezone_offset_hours: int = Field(default=8, ge=-12, le=14)
 
+    def render_header_text(self, context: ReceiptTemplateContext) -> str:
+        return self._render_section_text(
+            enabled=self.header_enabled,
+            template_text=self.header_text,
+            context=context,
+            error_message=ReceiptTemplateError.INVALID_HEADER_TEXT,
+        )
+
     def render_footer_text(self, context: ReceiptTemplateContext) -> str:
-        if not self.footer_enabled:
+        return self._render_section_text(
+            enabled=self.footer_enabled,
+            template_text=self.footer_text,
+            context=context,
+            error_message=ReceiptTemplateError.INVALID_FOOTER_TEXT,
+        )
+
+    def _render_section_text(
+        self,
+        *,
+        enabled: bool,
+        template_text: str,
+        context: ReceiptTemplateContext,
+        error_message: str,
+    ) -> str:
+        if not enabled:
             return ""
 
-        timestamp = datetime.now(
-            timezone(timedelta(hours=self.footer_timezone_offset_hours))
-        ).strftime(self.footer_timestamp_format)
+        timestamp = self._render_timestamp()
         try:
-            return self.footer_text.format(
+            return template_text.format(
                 timestamp=timestamp,
                 sender_name=context.sender_name,
                 sender_id=context.sender_id,
             )
         except (KeyError, ValueError) as exc:
-            raise ReceiptTemplateError(
-                ReceiptTemplateError.INVALID_FOOTER_TEXT
-            ) from exc
+            raise ReceiptTemplateError(error_message) from exc
+
+    def _render_timestamp(self) -> str:
+        return datetime.now(
+            timezone(timedelta(hours=self.footer_timezone_offset_hours))
+        ).strftime(self.footer_timestamp_format)
 
 
 class ReceiptTemplateError(RuntimeError):
     """Raised when a receipt template cannot be loaded."""
 
+    INVALID_HEADER_TEXT = (
+        "渲染模板 header_text 不合法，只能使用"
+        " {timestamp}、{sender_name}、{sender_id} 占位符。"
+    )
     INVALID_FOOTER_TEXT = (
         "渲染模板 footer_text 不合法，只能使用"
         " {timestamp}、{sender_name}、{sender_id} 占位符。"

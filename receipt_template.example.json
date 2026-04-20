@@ -1,5 +1,7 @@
 {
   "margin": 16,
+  "header_enabled": true,
+  "header_text": "来自 {sender_name}({sender_id})",
   "footer_enabled": true,
   "footer_text": "{sender_name} 于 {timestamp} 提交",
   "footer_timestamp_format": "%Y-%m-%d %H:%M:%S",

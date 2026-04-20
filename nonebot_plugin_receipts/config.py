@@ -15,5 +15,6 @@ class Config(BaseModel):
     receipt_font_size: int = Field(default=24, ge=12, le=96)
     receipt_line_spacing: int = Field(default=6, ge=0, le=40)
     receipt_section_gap: int = Field(default=6, ge=0, le=100)
+    receipt_session_timeout_seconds: int = Field(default=120, ge=10, le=3600)
     receipt_feed_lines: int = Field(default=4, ge=0, le=10)
     receipt_enable_cut: bool = True

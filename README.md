@@ -42,6 +42,7 @@ nonebot.load_plugin("nonebot_plugin_receipts")
 | `RECEIPT_FONT_SIZE`           | `24`                    | 文本字号                              |
 | `RECEIPT_LINE_SPACING`        | `6`                     | 文本行距                              |
 | `RECEIPT_SECTION_GAP`         | `6`                     | 文本和图片之间的垂直间距              |
+| `RECEIPT_SESSION_TIMEOUT_SECONDS` | `120`               | 等待用户补发打印内容的超时时间（秒）   |
 | `RECEIPT_FEED_LINES`          | `4`                     | 打印后走纸行数                        |
 | `RECEIPT_ENABLE_CUT`          | `true`                  | 是否附加切纸命令                      |
 
@@ -61,22 +62,28 @@ nonebot.load_plugin("nonebot_plugin_receipts")
 | 字段                           | 默认值                                     | 说明                   |
 | ------------------------------ | ------------------------------------------ | ---------------------- |
 | `margin`                       | `16`                                       | 左右和顶部内边距       |
+| `header_enabled`               | `false`                                    | 是否渲染页眉           |
+| `header_text`                  | `{sender_name}({sender_id})`               | 页眉文字模板           |
 | `footer_enabled`               | `true`                                     | 是否渲染页脚           |
 | `footer_text`                  | `{sender_name}({sender_id}) @ {timestamp}` | 页脚文字模板           |
 | `footer_timestamp_format`      | `%Y-%m-%d %H:%M:%S`                        | 时间格式               |
 | `footer_timezone_offset_hours` | `8`                                        | 页脚时间使用的时区偏移 |
 
-`footer_text` 支持这些占位符：
+`header_text` 和 `footer_text` 都支持这些占位符：
 
 - `{timestamp}`
 - `{sender_name}`
 - `{sender_id}`
+
+当 `header` 存在时，会在页眉和正文之间绘制一条全宽横线；当 `footer` 存在时，会在正文和页脚之间再绘制一条全宽横线。
 
 示例：
 
 ```json
 {
   "margin": 24,
+  "header_enabled": true,
+  "header_text": "来自 {sender_name}({sender_id})",
   "footer_enabled": true,
   "footer_text": "{sender_name}({sender_id}) 打印于 {timestamp}",
   "footer_timestamp_format": "%Y/%m/%d %H:%M",
@@ -98,6 +105,21 @@ nonebot.load_plugin("nonebot_plugin_receipts")
 2. 按提示继续发送一条包含文本、图片或两者混合的消息
 
 插件会把纯文本和图片消息段一起打印，并在提交成功后回复当前队列长度。
+
+如果命令后没有直接附带内容，插件会提示用户继续发送，并明确说明多久后超时。  
+如果用户在该时间窗口后才继续回复，插件会提示“已超时”，并直接结束本次等待；此时需要重新发送 `/小票` 开始新的打印流程。
+
+`RECEIPT_SESSION_TIMEOUT_SECONDS` 的实际生效时间不会超过 NoneBot 全局 `SESSION_EXPIRE_TIMEOUT`，建议两者保持一致或让前者更小。
+
+文本里支持类似 Markdown 的多级标题语法：
+
+- `# 一级标题`
+- `## 二级标题`
+- `### 三级标题`
+- 一直到 `###### 六级标题`
+
+在 `raster` 模式下会使用更大的字号和额外留白；在 `hybrid` 模式下会尽量映射为 ESC/POS 的加粗和放大文本。  
+如果需要打印以 `#` 开头的普通文本，可以写成 `\# 普通文本`。
 
 ## 注意事项
 

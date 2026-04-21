@@ -114,6 +114,14 @@ class DummyPluginConfig:
         self.receipt_allowed_user_ids = allowed_user_ids or []
         self.receipt_allowed_group_ids = allowed_group_ids or []
 
+    @property
+    def allowed_user_ids(self) -> list[str]:
+        return self.receipt_allowed_user_ids
+
+    @property
+    def allowed_group_ids(self) -> list[str]:
+        return self.receipt_allowed_group_ids
+
 
 class CommandHandlersTestCase(unittest.TestCase):
     def setUp(self) -> None:

@@ -112,8 +112,8 @@ def get_runtime_config() -> Config:
 def is_receipt_submission_allowed(event: MessageEvent) -> bool:
     """Return whether the incoming event is allowed to submit a print job."""
     config = get_runtime_config()
-    allowed_user_ids = set(config.receipt_allowed_user_ids)
-    allowed_group_ids = set(config.receipt_allowed_group_ids)
+    allowed_user_ids = set(config.allowed_user_ids)
+    allowed_group_ids = set(config.allowed_group_ids)
 
     if not allowed_user_ids and not allowed_group_ids:
         return True

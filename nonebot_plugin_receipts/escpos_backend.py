@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PIL import Image, ImageDraw, ImageOps
+from PIL import Image, ImageOps
 
 from .raster_backend import build_image_section
 from .render_types import (
@@ -11,7 +11,6 @@ from .render_types import (
     ReceiptBlock,
     ReceiptRenderError,
 )
-from .render_utils import load_font, measure_text
 from .text_markup import (
     encode_native_text,
     encode_styled_native_text,
@@ -23,6 +22,11 @@ if TYPE_CHECKING:
 
     from .config import Config
     from .template import ReceiptTemplate, ReceiptTemplateContext
+
+
+NATIVE_CHAR_WIDTH_PX = 12
+DIVIDER_BEFORE = "before"
+DIVIDER_AFTER = "after"
 
 
 def render_hybrid_escpos(
@@ -37,21 +41,39 @@ def render_hybrid_escpos(
         raise ReceiptRenderError(ReceiptRenderError.INVALID_LAYOUT)
 
     chunks: list[bytes] = [b"\x1b@"]
+    divider_width_chars = max(1, layout.width // NATIVE_CHAR_WIDTH_PX)
 
     header_text = template.render_header_text(template_context)
     append_hybrid_text_section(
         chunks,
         header_text,
         layout.width_chars,
-        add_divider_after=True,
+        divider_width_chars,
+        divider=DIVIDER_AFTER,
     )
 
-    has_body_content = append_hybrid_body_sections(
-        chunks,
-        blocks,
-        config,
-        layout,
-    )
+    has_body_content = False
+    for block in blocks:
+        if block.kind == "text" and block.text:
+            styled_lines = parse_styled_lines(block.text)
+            if not styled_lines:
+                continue
+            chunks.append(encode_styled_native_text(styled_lines, layout.width_chars))
+            has_body_content = True
+            continue
+
+        if block.kind != "image" or block.image is None:
+            continue
+
+        section = build_image_section(
+            block.image,
+            layout.width,
+            layout.content_width,
+            config.receipt_section_gap,
+        )
+        chunks.append(image_to_escpos(section, config, initialize=False))
+        has_body_content = True
+
     if not has_body_content:
         raise ReceiptRenderError(ReceiptRenderError.EMPTY_CONTENT)
 
@@ -60,7 +82,8 @@ def render_hybrid_escpos(
         chunks,
         footer_text,
         layout.width_chars,
-        add_divider_before=True,
+        divider_width_chars,
+        divider=DIVIDER_BEFORE,
     )
 
     if config.receipt_feed_lines:
@@ -76,11 +99,7 @@ def build_hybrid_layout(config: Config, template: ReceiptTemplate) -> HybridLayo
     margin = template.margin
     content_width = width - margin * 2
 
-    font = load_font(config)
-    probe = Image.new("L", (width, 10), color=255)
-    draw = ImageDraw.Draw(probe)
-    avg_char_width = max(1, measure_text(draw, "AA", font) // 2)
-    width_chars = max(1, content_width // avg_char_width)
+    width_chars = max(1, content_width // NATIVE_CHAR_WIDTH_PX)
     return HybridLayout(
         width=width,
         content_width=content_width,
@@ -88,18 +107,12 @@ def build_hybrid_layout(config: Config, template: ReceiptTemplate) -> HybridLayo
     )
 
 
-def build_native_divider(width_chars: int) -> list[str]:
-    """Build a text divider sized to the current printer width."""
-    return ["-" * max(1, width_chars)]
-
-
 def append_hybrid_text_section(
     chunks: list[bytes],
     text: str,
     width_chars: int,
-    *,
-    add_divider_before: bool = False,
-    add_divider_after: bool = False,
+    divider_width_chars: int,
+    divider: str = "",
 ) -> None:
     """Append wrapped native text lines and an optional divider."""
     if not text:
@@ -109,57 +122,11 @@ def append_hybrid_text_section(
     if not styled_lines:
         return
 
-    if add_divider_before:
-        chunks.append(encode_native_text(build_native_divider(width_chars)))
+    if divider == DIVIDER_BEFORE:
+        chunks.append(encode_native_text(["-" * divider_width_chars]))
     chunks.append(encode_styled_native_text(styled_lines, width_chars))
-    if add_divider_after:
-        chunks.append(encode_native_text(build_native_divider(width_chars)))
-
-
-def append_hybrid_body_sections(
-    chunks: list[bytes],
-    blocks: Sequence[ReceiptBlock],
-    config: Config,
-    layout: HybridLayout,
-) -> bool:
-    """Append mixed native-text and raster-image body sections."""
-    has_body_content = False
-    for block in blocks:
-        appended = append_hybrid_body_section(
-            chunks,
-            block,
-            config,
-            layout,
-        )
-        has_body_content = has_body_content or appended
-    return has_body_content
-
-
-def append_hybrid_body_section(
-    chunks: list[bytes],
-    block: ReceiptBlock,
-    config: Config,
-    layout: HybridLayout,
-) -> bool:
-    """Append one body block to hybrid ESC/POS output."""
-    if block.kind == "text" and block.text:
-        styled_lines = parse_styled_lines(block.text)
-        if not styled_lines:
-            return False
-        chunks.append(encode_styled_native_text(styled_lines, layout.width_chars))
-        return True
-
-    if block.kind == "image" and block.image is not None:
-        section = build_image_section(
-            block.image,
-            layout.width,
-            layout.content_width,
-            config.receipt_section_gap,
-        )
-        chunks.append(image_to_escpos(section, config, initialize=False))
-        return True
-
-    return False
+    if divider == DIVIDER_AFTER:
+        chunks.append(encode_native_text(["-" * divider_width_chars]))
 
 
 def image_to_escpos(

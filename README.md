@@ -29,22 +29,22 @@ nonebot.load_plugin("nonebot_plugin_receipts")
 
 插件通过 NoneBot 全局配置读取以下环境变量：
 
-| 变量                          | 默认值                  | 说明                                  |
-| ----------------------------- | ----------------------- | ------------------------------------- |
-| `RECEIPTS_SPOOLER_URL`        | `http://127.0.0.1:8000` | `receipts-spooler` 服务地址           |
-| `RECEIPTS_SPOOLER_TOKEN`      | 空                      | 对应 `X-Spooler-Token`                |
-| `RECEIPTS_SPOOLER_TIMEOUT`    | `5.0`                   | 调用 spooler 的 HTTP 超时             |
-| `RECEIPT_IMAGE_FETCH_TIMEOUT` | `5.0`                   | 下载图片消息内容时的 HTTP 超时        |
-| `RECEIPT_RENDER_MODE`         | `raster`                | 渲染模式，可选 `raster`/`hybrid`      |
-| `RECEIPT_PRINTER_WIDTH`       | `576`                   | 小票像素宽度，最大 `576`              |
-| `RECEIPT_TEMPLATE_PATH`       | 空                      | 可选，指向渲染模板 JSON 文件          |
-| `RECEIPT_FONT_PATH`           | 空                      | 可选，建议配置支持中文的 TTF/OTF 字体 |
-| `RECEIPT_FONT_SIZE`           | `24`                    | 文本字号                              |
-| `RECEIPT_LINE_SPACING`        | `6`                     | 文本行距                              |
-| `RECEIPT_SECTION_GAP`         | `6`                     | 文本和图片之间的垂直间距              |
-| `RECEIPT_SESSION_TIMEOUT_SECONDS` | `120`               | 等待用户补发打印内容的超时时间（秒）   |
-| `RECEIPT_FEED_LINES`          | `4`                     | 打印后走纸行数                        |
-| `RECEIPT_ENABLE_CUT`          | `true`                  | 是否附加切纸命令                      |
+| 变量                              | 默认值                  | 说明                                  |
+| --------------------------------- | ----------------------- | ------------------------------------- |
+| `RECEIPTS_SPOOLER_URL`            | `http://127.0.0.1:8000` | `receipts-spooler` 服务地址           |
+| `RECEIPTS_SPOOLER_TOKEN`          | 空                      | 对应 `X-Spooler-Token`                |
+| `RECEIPTS_SPOOLER_TIMEOUT`        | `5.0`                   | 调用 spooler 的 HTTP 超时             |
+| `RECEIPT_IMAGE_FETCH_TIMEOUT`     | `5.0`                   | 下载图片消息内容时的 HTTP 超时        |
+| `RECEIPT_RENDER_MODE`             | `raster`                | 渲染模式，可选 `raster`/`hybrid`      |
+| `RECEIPT_PRINTER_WIDTH`           | `576`                   | 小票像素宽度，最大 `576`              |
+| `RECEIPT_TEMPLATE_PATH`           | 空                      | 可选，指向渲染模板 JSON 文件          |
+| `RECEIPT_FONT_PATH`               | 空                      | 可选，建议配置支持中文的 TTF/OTF 字体 |
+| `RECEIPT_FONT_SIZE`               | `24`                    | 文本字号                              |
+| `RECEIPT_LINE_SPACING`            | `6`                     | 文本行距                              |
+| `RECEIPT_SECTION_GAP`             | `6`                     | 文本和图片之间的垂直间距              |
+| `RECEIPT_SESSION_TIMEOUT_SECONDS` | `120`                   | 等待用户补发打印内容的超时时间（秒）  |
+| `RECEIPT_FEED_LINES`              | `4`                     | 打印后走纸行数                        |
+| `RECEIPT_ENABLE_CUT`              | `true`                  | 是否附加切纸命令                      |
 
 ### 渲染模式
 
@@ -120,6 +120,38 @@ nonebot.load_plugin("nonebot_plugin_receipts")
 
 在 `raster` 模式下会使用更大的字号和额外留白；在 `hybrid` 模式下会尽量映射为 ESC/POS 的加粗和放大文本。  
 如果需要打印以 `#` 开头的普通文本，可以写成 `\# 普通文本`。
+
+## 手动实机测试（不启动 NoneBot）
+
+可直接运行脚本把测试内容渲染为 ESC/POS 并提交到 `receipts-spooler`：
+
+```powershell
+python scripts/manual_print_test.py --mode hybrid --spooler-url http://127.0.0.1:8000
+```
+
+常用参数：
+
+- `--mode hybrid|raster`：渲染模式，默认 `hybrid`
+- `--text`：测试文本（支持 `#` 标题语法）
+- `--spooler-url`：spooler 地址
+- `--spooler-token`：可选鉴权 token
+- `--printer-width`：打印宽度（像素）
+- `--feed-lines`：走纸行数
+- `--cut`：追加切纸命令（默认不切）
+- `--divider-only`：只打印一条分割线（用于实机校准）
+- `--divider-chars`：分割线字符数（默认按 `printer_width / 12`）
+
+也支持通过环境变量传参：
+
+- `RENDER_MODE`
+- `SPOOLER_URL`
+- `SPOOLER_TOKEN`
+- `PRINTER_WIDTH`
+- `FEED_LINES`
+- `SENDER_NAME`
+- `SENDER_ID`
+
+该脚本仅用于手动联调与实机验证，不参与自动化测试流程。
 
 ## 注意事项
 

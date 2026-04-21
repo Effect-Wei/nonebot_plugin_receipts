@@ -1,20 +1,16 @@
 from __future__ import annotations
 
 from time import monotonic
-from typing import TYPE_CHECKING
 
 from nonebot import get_driver, get_plugin_config
+from nonebot.adapters.onebot.v11 import Message, MessageEvent  # noqa: TC002
+from nonebot.matcher import Matcher  # noqa: TC002
 from nonebot.params import Arg, CommandArg
 
 from .config import Config
 from .renderer import ReceiptRenderError, render_receipt
 from .spooler import SpoolerClient, SpoolerError
 from .template import ReceiptTemplateContext
-
-if TYPE_CHECKING:
-    from nonebot.adapters.onebot.v11 import Message, MessageEvent
-    from nonebot.matcher import Matcher
-
 
 RECEIPT_TIMEOUT_DEADLINE_KEY = "receipt_timeout_deadline"
 

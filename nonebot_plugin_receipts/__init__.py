@@ -8,7 +8,7 @@ __plugin_meta__ = PluginMetadata(
     name="小票打印",
     description="将发送给 Bot 的文本和图片消息通过 receipts-spooler 打印",
     usage=(
-        "发送 /小票 后附带文本/图片，或单独发送命令后按提示再发送一条要打印的消息。"
+        "发送 /ticket 或 /receipt 后附带文本/图片，或单独发送命令后按提示再发送一条要打印的消息。"
     ),
     type="application",
     config=Config,
@@ -19,7 +19,7 @@ __plugin_meta__ = PluginMetadata(
 try:
     ReceiptPrint = on_command(
         "ticket",
-        aliases={"小票", "ticket", "receipt"},
+        aliases={"ticket", "receipt"},
         block=True,
         priority=10,
     )

@@ -5,12 +5,17 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import AsyncMock, patch
 
+from nonebot.exception import FinishedException
+
 from nonebot_plugin_receipts.command_handlers import (
     RECEIPT_TIMEOUT_DEADLINE_KEY,
     build_initial_receipt_prompt,
     build_timeout_receipt_prompt,
     format_timeout_duration,
     get_effective_session_timeout_seconds,
+    get_event_group_id,
+    get_event_user_id,
+    is_receipt_submission_allowed,
     is_receipt_timeout_expired,
     register_receipt_handlers,
     reset_receipt_timeout_deadline,
@@ -99,8 +104,15 @@ class DummyDriver:
 
 
 class DummyPluginConfig:
-    def __init__(self, seconds: int) -> None:
+    def __init__(
+        self,
+        seconds: int,
+        allowed_user_ids: list[str] | None = None,
+        allowed_group_ids: list[str] | None = None,
+    ) -> None:
         self.receipt_session_timeout_seconds = seconds
+        self.receipt_allowed_user_ids = allowed_user_ids or []
+        self.receipt_allowed_group_ids = allowed_group_ids or []
 
 
 class CommandHandlersTestCase(unittest.TestCase):
@@ -142,6 +154,54 @@ class CommandHandlersTestCase(unittest.TestCase):
         matcher.state[RECEIPT_TIMEOUT_DEADLINE_KEY] = 0
         self.assertTrue(is_receipt_timeout_expired(cast("Any", matcher)))
 
+    def test_get_event_ids(self) -> None:
+        private_event = SimpleNamespace(user_id=123456)
+        group_event = SimpleNamespace(user_id=123456, group_id=654321)
+
+        self.assertEqual(get_event_user_id(cast("Any", private_event)), "123456")
+        self.assertEqual(get_event_group_id(cast("Any", private_event)), "")
+        self.assertEqual(get_event_group_id(cast("Any", group_event)), "654321")
+
+    def test_submission_allowed_when_whitelist_empty(self) -> None:
+        event = SimpleNamespace(user_id=123456, group_id=654321)
+
+        with patch(
+            "nonebot_plugin_receipts.command_handlers.get_runtime_config",
+            return_value=DummyPluginConfig(120),
+        ):
+            self.assertTrue(is_receipt_submission_allowed(cast("Any", event)))
+
+    def test_submission_allowed_for_whitelisted_user(self) -> None:
+        event = SimpleNamespace(user_id=123456)
+
+        with patch(
+            "nonebot_plugin_receipts.command_handlers.get_runtime_config",
+            return_value=DummyPluginConfig(120, allowed_user_ids=["123456"]),
+        ):
+            self.assertTrue(is_receipt_submission_allowed(cast("Any", event)))
+
+    def test_submission_allowed_for_whitelisted_group(self) -> None:
+        event = SimpleNamespace(user_id=111111, group_id=654321)
+
+        with patch(
+            "nonebot_plugin_receipts.command_handlers.get_runtime_config",
+            return_value=DummyPluginConfig(120, allowed_group_ids=["654321"]),
+        ):
+            self.assertTrue(is_receipt_submission_allowed(cast("Any", event)))
+
+    def test_submission_denied_for_non_whitelisted_sender(self) -> None:
+        event = SimpleNamespace(user_id=111111, group_id=222222)
+
+        with patch(
+            "nonebot_plugin_receipts.command_handlers.get_runtime_config",
+            return_value=DummyPluginConfig(
+                120,
+                allowed_user_ids=["123456"],
+                allowed_group_ids=["654321"],
+            ),
+        ):
+            self.assertFalse(is_receipt_submission_allowed(cast("Any", event)))
+
 
 class CommandHandlerFlowTestCase(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
@@ -153,23 +213,55 @@ class CommandHandlerFlowTestCase(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         matcher = SimpleNamespace(state={}, send=AsyncMock(), set_arg=AsyncMock())
+        event = SimpleNamespace(user_id=123456)
         message = DummyMessage()
 
-        with patch(
-            "nonebot_plugin_receipts.command_handlers.get_effective_session_timeout_seconds",
-            return_value=119,
+        with (
+            patch(
+                "nonebot_plugin_receipts.command_handlers.get_effective_session_timeout_seconds",
+                return_value=119,
+            ),
+            patch(
+                "nonebot_plugin_receipts.command_handlers.get_runtime_config",
+                return_value=DummyPluginConfig(120),
+            ),
         ):
-            await call_registered_handler(require_handle_handler(), matcher, message)
+            await call_registered_handler(
+                require_handle_handler(), matcher, event, message
+            )
 
         matcher.send.assert_awaited_once()
         prompt = matcher.send.await_args.args[0]
         self.assertIn("1 分 59 秒", prompt)
         self.assertIn(RECEIPT_TIMEOUT_DEADLINE_KEY, matcher.state)
 
+    async def test_handle_print_command_ignores_non_whitelisted_sender(self) -> None:
+        matcher = SimpleNamespace(state={}, send=AsyncMock(), set_arg=AsyncMock())
+        event = SimpleNamespace(user_id=111111, group_id=222222)
+        message = DummyMessage(text="hello")
+
+        with (
+            self.assertRaises(FinishedException),
+            patch(
+                "nonebot_plugin_receipts.command_handlers.get_runtime_config",
+                return_value=DummyPluginConfig(
+                    120,
+                    allowed_user_ids=["123456"],
+                    allowed_group_ids=["654321"],
+                ),
+            ),
+        ):
+            await call_registered_handler(
+                require_handle_handler(), matcher, event, message
+            )
+
+        matcher.send.assert_not_awaited()
+        matcher.set_arg.assert_not_awaited()
+
     async def test_handle_receipt_content_finishes_when_timeout_expired(self) -> None:
         matcher = DummyMatcher()
         matcher.state[RECEIPT_TIMEOUT_DEADLINE_KEY] = 0
-        event = SimpleNamespace()
+        event = SimpleNamespace(user_id=123456)
         receipt_content = DummyMessage(text="late")
 
         with (
@@ -178,6 +270,10 @@ class CommandHandlerFlowTestCase(unittest.IsolatedAsyncioTestCase):
                 "nonebot_plugin_receipts.command_handlers.get_effective_session_timeout_seconds",
                 return_value=119,
             ),
+            patch(
+                "nonebot_plugin_receipts.command_handlers.get_runtime_config",
+                return_value=DummyPluginConfig(120),
+            ),
         ):
             await call_registered_handler(
                 require_got_handler(), matcher, event, receipt_content
@@ -185,6 +281,26 @@ class CommandHandlerFlowTestCase(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("已超时", str(exc_info.exception))
         self.assertIn("/小票", str(exc_info.exception))
+
+    async def test_handle_receipt_content_ignores_non_whitelisted_sender(self) -> None:
+        matcher = DummyMatcher()
+        event = SimpleNamespace(user_id=111111, group_id=222222)
+        receipt_content = DummyMessage(text="late")
+
+        with (
+            self.assertRaises(FinishedException),
+            patch(
+                "nonebot_plugin_receipts.command_handlers.get_runtime_config",
+                return_value=DummyPluginConfig(
+                    120,
+                    allowed_user_ids=["123456"],
+                    allowed_group_ids=["654321"],
+                ),
+            ),
+        ):
+            await call_registered_handler(
+                require_got_handler(), matcher, event, receipt_content
+            )
 
 
 if __name__ == "__main__":

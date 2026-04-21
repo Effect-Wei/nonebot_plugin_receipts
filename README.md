@@ -6,7 +6,7 @@
 
 ## 功能
 
-- 提供 `ticket`、`小票`、`receipt` 指令，三者互为别名
+- 提供 `ticket`、`receipt` 指令，二者互为别名
 - 支持命令后直接附带文本和图片
 - 如果命令后没有内容，会继续追问下一条消息
 - 将文本和图片合成为一张热敏小票图，再编码为 ESC/POS 栅格打印命令
@@ -45,6 +45,8 @@ nonebot.load_plugin("nonebot_plugin_receipts")
 | `RECEIPT_SESSION_TIMEOUT_SECONDS` | `120`                   | 等待用户补发打印内容的超时时间（秒）  |
 | `RECEIPT_FEED_LINES`              | `4`                     | 打印后走纸行数                        |
 | `RECEIPT_ENABLE_CUT`              | `true`                  | 是否附加切纸命令                      |
+| `RECEIPT_ALLOWED_USER_IDS`        | 空                      | 允许提交打印任务的 QQ 号白名单        |
+| `RECEIPT_ALLOWED_GROUP_IDS`       | 空                      | 允许提交打印任务的 QQ 群号白名单      |
 
 ### 渲染模式
 
@@ -52,6 +54,28 @@ nonebot.load_plugin("nonebot_plugin_receipts")
 - `hybrid`：文本走打印机原生字符输出，图片仍走位图，能减少大量文字被渲染成图片。
 
 `hybrid` 模式下，中文是否正常输出取决于打印机对中英文字符集的支持情况。
+
+### 白名单
+
+可以通过以下配置限制谁能提交打印任务：
+
+- `RECEIPT_ALLOWED_USER_IDS`：允许提交的 QQ 号白名单
+- `RECEIPT_ALLOWED_GROUP_IDS`：允许提交的 QQ 群号白名单
+
+两个配置都为空时，默认允许所有会话使用。  
+只要命中任意一个条件就会放行：
+
+- 发送者 QQ 号在 `RECEIPT_ALLOWED_USER_IDS` 中
+- 当前群号在 `RECEIPT_ALLOWED_GROUP_IDS` 中
+
+未命中白名单的消息会被直接忽略，不会回复任何提示。
+
+环境变量可以写成逗号分隔，例如：
+
+```env
+RECEIPT_ALLOWED_USER_IDS=123456,234567
+RECEIPT_ALLOWED_GROUP_IDS=345678,456789
+```
 
 ### 渲染模板
 
@@ -96,18 +120,18 @@ nonebot.load_plugin("nonebot_plugin_receipts")
 直接在命令后附带内容：
 
 ```text
-/小票 今晚睡大觉
+/ticket 今晚睡大觉
 ```
 
 或者：
 
-1. 发送 `/小票`
+1. 发送 `/ticket` 或 `/receipt`
 2. 按提示继续发送一条包含文本、图片或两者混合的消息
 
 插件会把纯文本和图片消息段一起打印，并在提交成功后回复当前队列长度。
 
 如果命令后没有直接附带内容，插件会提示用户继续发送，并明确说明多久后超时。  
-如果用户在该时间窗口后才继续回复，插件会提示“已超时”，并直接结束本次等待；此时需要重新发送 `/小票` 开始新的打印流程。
+如果用户在该时间窗口后才继续回复，插件会提示“已超时”，并直接结束本次等待；此时需要重新发送 `/ticket` 或 `/receipt` 开始新的打印流程。
 
 `RECEIPT_SESSION_TIMEOUT_SECONDS` 的实际生效时间不会超过 NoneBot 全局 `SESSION_EXPIRE_TIMEOUT`，建议两者保持一致或让前者更小。
 

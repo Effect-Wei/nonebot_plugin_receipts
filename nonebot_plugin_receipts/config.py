@@ -1,6 +1,8 @@
-from typing import Literal
+import json
+import re
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class Config(BaseModel):
@@ -18,3 +20,35 @@ class Config(BaseModel):
     receipt_session_timeout_seconds: int = Field(default=120, ge=10, le=3600)
     receipt_feed_lines: int = Field(default=4, ge=0, le=10)
     receipt_enable_cut: bool = True
+    receipt_allowed_user_ids: list[str] = Field(default_factory=list)
+    receipt_allowed_group_ids: list[str] = Field(default_factory=list)
+
+    @field_validator(
+        "receipt_allowed_user_ids",
+        "receipt_allowed_group_ids",
+        mode="before",
+    )
+    @classmethod
+    def normalize_whitelist_ids(cls, value: Any) -> list[str]:
+        if value is None:
+            return []
+
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return []
+
+            try:
+                value = json.loads(stripped)
+            except json.JSONDecodeError:
+                return [
+                    item
+                    for part in re.split(r"[\s,，]+", stripped)
+                    if (item := part.strip())
+                ]
+
+        if isinstance(value, list | tuple | set | frozenset):
+            return [item for entry in value if (item := str(entry).strip())]
+
+        item = str(value).strip()
+        return [item] if item else []

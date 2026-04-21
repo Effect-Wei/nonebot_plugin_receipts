@@ -4,6 +4,7 @@ from time import monotonic
 
 from nonebot import get_driver, get_plugin_config
 from nonebot.adapters.onebot.v11 import Message, MessageEvent  # noqa: TC002
+from nonebot.exception import FinishedException
 from nonebot.matcher import Matcher  # noqa: TC002
 from nonebot.params import Arg, CommandArg
 
@@ -20,8 +21,11 @@ def register_receipt_handlers(receipt_print: type[Matcher]) -> None:
 
     @receipt_print.handle()
     async def handle_print_command(
-        matcher: Matcher, message: Message = CommandArg()
+        matcher: Matcher, event: MessageEvent, message: Message = CommandArg()
     ) -> None:
+        if not is_receipt_submission_allowed(event):
+            raise FinishedException
+
         if has_printable_content(message):
             matcher.set_arg("receipt_content", message)
             return
@@ -38,6 +42,9 @@ def register_receipt_handlers(receipt_print: type[Matcher]) -> None:
         event: MessageEvent,
         receipt_content: Message = Arg("receipt_content"),
     ) -> None:
+        if not is_receipt_submission_allowed(event):
+            raise FinishedException
+
         timeout_seconds = get_effective_session_timeout_seconds()
         if is_receipt_timeout_expired(matcher):
             await receipt_print.finish(build_timeout_receipt_prompt(timeout_seconds))
@@ -100,6 +107,35 @@ def build_template_context(event: MessageEvent) -> ReceiptTemplateContext:
 def get_runtime_config() -> Config:
     """Fetch the current plugin config from the active NoneBot driver."""
     return get_plugin_config(Config)
+
+
+def is_receipt_submission_allowed(event: MessageEvent) -> bool:
+    """Return whether the incoming event is allowed to submit a print job."""
+    config = get_runtime_config()
+    allowed_user_ids = set(config.receipt_allowed_user_ids)
+    allowed_group_ids = set(config.receipt_allowed_group_ids)
+
+    if not allowed_user_ids and not allowed_group_ids:
+        return True
+
+    user_id = get_event_user_id(event)
+    if user_id and user_id in allowed_user_ids:
+        return True
+
+    group_id = get_event_group_id(event)
+    return bool(group_id and group_id in allowed_group_ids)
+
+
+def get_event_user_id(event: MessageEvent) -> str:
+    """Extract the normalized sender QQ id from an event."""
+    user_id = getattr(event, "user_id", None)
+    return str(user_id).strip() if user_id is not None else ""
+
+
+def get_event_group_id(event: MessageEvent) -> str:
+    """Extract the normalized group QQ id from an event, if any."""
+    group_id = getattr(event, "group_id", None)
+    return str(group_id).strip() if group_id is not None else ""
 
 
 def get_effective_session_timeout_seconds() -> int:
